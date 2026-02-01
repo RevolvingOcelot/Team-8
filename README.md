@@ -11,7 +11,7 @@ all dependancies can be installed using  **pip install -r requirements.txt**
 The project is split into 2 main notebook files, **phase_transition_modular.ipynb** and **Crash_Indicator_Done.ipynb** which is used to attempt to predict crashes
 
 In order to run **phase_transitions_modular**, place it in the same folder as the *modules* folder and simply run it cell by cell.  
-In case **phase_transition_modular.ipynb** is not working there is also the older non-modular **phase_transition.ipynb** can be used instead
+In case **phase_transition_modular.ipynb** is not working there is also the older non-modular **phase_transition.ipynb**, found in the *legacy* folder, can be used instead
 
 **Crash_Indicator_Done.ipynb** is self contained and should be ran cell by cell.
 
