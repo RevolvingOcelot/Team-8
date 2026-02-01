@@ -77,6 +77,29 @@ simple code implementations)
 
 ---
 
+### 4. Plot Replication and Marker Annotation
+
+**Input**:
+We used the model to generate plotting code for **specific figures** in our analysis. Tasks were limited to producing plot layouts and adding visual elements such as centroids, crash-day markers, trajectory lines, vertical reference lines, and IQR shading.
+
+**Output**:
+Matplotlib-based code for PCA phase-space plots and time-aligned Mahalanobis distance plots with appropriate markers, annotations, and legends.
+
+**What we adopted**:
+
+* Plot structure and marker placement logic
+* Visual conventions used to highlight pre-crash states and crash onsets
+
+**What we verified and modified**:
+
+* Verified that all plotted quantities, alignments, and aggregations matched the underlying data and definitions
+* Simplified and adjusted the generated code to fit our notebook and ensure consistency across figures
+
+**Scope limitation**:
+GenAI was used **only** for initial plot production and visual annotation; interpretation and validation were done independently.
+
+---
+
 ## Effectiveness and Limitations
 
 ### Strengths
