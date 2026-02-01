@@ -16,6 +16,12 @@ In case **phase_transition_modular.ipynb** is not working there is also the olde
 **Crash_Indicator_Done.ipynb** is self contained and should be ran cell by cell.
 
 
+# Known issues
+-  In **phase_transition_modular.ipynb** :  
+
+    - Cell 3 fails to load one of the stock tickers due to missing data.  
+    - Cell 5 outputs a runtime warning due to an invalid division, likely due to a missing stock value or near-zero value. This is expected behavior and does not impair the code.
+
 # Authors
 This project was made as part of the UvA's Complex System Simulation course by:
 
