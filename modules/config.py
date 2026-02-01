@@ -25,7 +25,7 @@ SP500_TICKERS = [
 
 # Parameters from paper: M=40 days, Δ=20 days shift
 START_DATE = '1985-01-02'  # Adjust based on data availability
-END_DATE = '2024-12-31'
+END_DATE = '2025-12-31'
 EPOCH_SIZE = 40   # M = 40 days
 SHIFT = 20        # Δ = 20 days
 
@@ -106,14 +106,6 @@ COLORS_3D = {
     'Type-2': 'blue',
     'Anomaly': 'green',
     'Normal': 'gray',
-}
-
-MARKERS_3D_DIFFS = {
-    'Crash': ('^', 'red', 50),
-    'Type-1': ('D', 'deepskyblue', 40),
-    'Type-2': ('s', 'blue', 40),
-    'Anomaly': ('o', 'green', 40),
-    'Normal': ('o', 'gray', 10),
 }
 
 CRASH_EVENTS = [

@@ -1,14 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
-
-
 from typing import Dict, List, Tuple, Optional
-
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
-from modules.eigen import get_event_sequence, classify_transition, PhaseThresholds
+from modules.entropy import assign_phase_regimes_quantiles 
+import matplotlib.dates as mdates
+import matplotlib.patches as mpatches
+from scipy.interpolate import griddata
+from modules.entropy import get_event_sequence, classify_transition, PhaseThresholds
+from modules.config import PHASE_MARKERS
 
 def set_plot_style():
     """Set global matplotlib style for the project."""
@@ -16,13 +15,6 @@ def set_plot_style():
     plt.rcParams['figure.figsize'] = (12, 6)
     plt.rcParams['font.size'] = 11
 
-markers = {
-    'Crash': ('^', 'red', 50),
-    'Type-1': ('D', 'deepskyblue', 40),
-    'Type-2': ('s', 'blue', 40),
-    'Anomaly': ('o', 'green', 40),
-    'Normal': ('o', 'gray', 15),
-}
 
 def plot_correlation_decomposition(C, C_M, C_GR, title='Eigenvalue Decomposition of Correlation Matrix'):
     """Visualize correlation matrix + decomposition."""
@@ -50,7 +42,7 @@ def plot_regime_correlation_matrices(returns, regime_examples, epoch_size, get_c
 
     for ax, (regime, date) in zip(axes, regime_examples.items()):
         try:
-            C, actual_date = get_corr_fn(date, returns, epoch_size, compute_corr_fn)
+            C, actual_date = get_corr_fn(date, returns, epoch_size)
             im = ax.imshow(C, cmap='jet', vmin=-1, vmax=1, aspect='equal')
 
             date_str = actual_date.strftime('%d-%m-%y')
@@ -72,10 +64,8 @@ def plot_regime_correlation_matrices(returns, regime_examples, epoch_size, get_c
     plt.show()
 
 
-def plot_ranked_eigen_centralities(C, C_M, C_GR,
-                                   correlation_to_A_matrix,
-                                   compute_eigen_centrality,
-                                   title='Ranked Eigen-centralities'):
+def plot_ranked_eigen_centralities(C, C_M, C_GR, correlation_to_A_matrix, compute_eigen_centrality, title='Ranked Eigen-centralities'):
+
     """Plot ranked eigen-centralities for full, market, and group-random matrices."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -101,159 +91,6 @@ def plot_ranked_eigen_centralities(C, C_M, C_GR,
     plt.show()
 
 
-def plot_phase_space(results, get_transition_sequence_fn):
-    """
-    Plot phase space and transitions.
-    
-    Parameters
-    ----------
-    results : pd.DataFrame
-        Must contain columns: 'date', 'regime', 'abs_H_minus_HM', 'abs_H_minus_HGR'
-    get_transition_sequence_fn : callable
-        Function with signature (results_df, event_date, n_before=3, n_after=3) -> pd.DataFrame
-    """
-    # Color scheme matching paper
-    COLORS = {
-        'normal': 'gray',
-        'crash': 'red',
-        'bubble': 'blue',
-        'type-1': 'green',
-        'type-2': 'purple',
-    }
-
-    # Different markers for different regimes (like paper)
-    MARKERS = {
-        'normal': ('o', 15),   # small circle
-        'crash': ('^', 50),    # triangle
-        'bubble': ('s', 40),   # square
-        'type-1': ('D', 40),   # diamond
-    }
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-
-    # LEFT PLOT: Phase space with calendar-based regime colors
-    ax = axes[0]
-
-    for regime in ['normal', 'crash', 'bubble', 'type-1']:
-        mask = results['regime'] == regime
-        if mask.any():
-            marker, size = MARKERS[regime]
-            ax.scatter(
-                results.loc[mask, 'abs_H_minus_HM'] + 1e-6,
-                results.loc[mask, 'abs_H_minus_HGR'] + 1e-6,
-                c=COLORS[regime],
-                marker=marker,
-                s=size,
-                label=regime.capitalize(),
-                alpha=0.7,
-                edgecolors='white',
-                linewidth=0.3,
-                zorder=2
-            )
-
-    # WOE reference - BOTTOM-RIGHT (high |H-H_M|, low |H-H_GR|)
-    ax.scatter(
-        [0.5], [0.005],
-        c='white',
-        marker='*',
-        s=300,
-        edgecolors='black',
-        linewidth=1.5,
-        label='WOE',
-        zorder=5
-    )
-
-    # Crash transition (Lehman 2008)
-    crash_seq = get_transition_sequence_fn(results, '2008-09-15', 3, 3)
-    if len(crash_seq) > 1:
-        x = crash_seq['abs_H_minus_HM'].values + 1e-6
-        y = crash_seq['abs_H_minus_HGR'].values + 1e-6
-        ax.plot(
-            x, y,
-            'r--',
-            linewidth=2,
-            zorder=4,
-            marker='o',
-            markersize=8,
-            markerfacecolor='darkred',
-            markeredgecolor='darkred'
-        )
-        for i, (xi, yi) in enumerate(zip(x, y)):
-            ax.annotate(
-                str(i + 1),
-                (xi, yi),
-                fontsize=9,
-                fontweight='bold',
-                color='darkred',
-                xytext=(4, 4),
-                textcoords='offset points',
-                zorder=6
-            )
-
-    # Bubble transition (Dot-com 2000)
-    bubble_seq = get_transition_sequence_fn(results, '2000-03-10', 3, 3)
-    if len(bubble_seq) > 1:
-        x = bubble_seq['abs_H_minus_HM'].values + 1e-6
-        y = bubble_seq['abs_H_minus_HGR'].values + 1e-6
-        ax.plot(
-            x, y,
-            'b--',
-            linewidth=2,
-            zorder=4,
-            marker='o',
-            markersize=8,
-            markerfacecolor='darkblue',
-            markeredgecolor='darkblue'
-        )
-        for i, (xi, yi) in enumerate(zip(x, y)):
-            ax.annotate(
-                str(i + 1),
-                (xi, yi),
-                fontsize=9,
-                fontweight='bold',
-                color='darkblue',
-                xytext=(4, 4),
-                textcoords='offset points',
-                zorder=6
-            )
-
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlabel('|H - H$_M$|', fontsize=12)
-    ax.set_ylabel('|H - H$_{GR}$|', fontsize=12)
-    ax.set_title('Phase Space (Calendar-Based Labels)', fontsize=14)
-    ax.legend(loc='upper left', fontsize=9)
-    ax.grid(True, alpha=0.3, which='both')
-    ax.set_xlim([1e-4, 1e0])
-    ax.set_ylim([1e-4, 1e0])
-
-    # =============================================================================
-    # RIGHT PLOT: Colored by time
-    # =============================================================================
-    ax = axes[1]
-    scatter = ax.scatter(
-        results['abs_H_minus_HM'] + 1e-6,
-        results['abs_H_minus_HGR'] + 1e-6,
-        c=range(len(results)),
-        cmap='viridis',
-        alpha=0.6,
-        s=30
-    )
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlabel('|H - H$_M$|', fontsize=12)
-    ax.set_ylabel('|H - H$_{GR}$|', fontsize=12)
-    ax.set_title('Phase Space - Colored by Time', fontsize=14)
-    plt.colorbar(scatter, ax=ax, label='Epoch Index')
-    ax.grid(True, alpha=0.3, which='both')
-    ax.set_xlim([1e-4, 1e0])
-    ax.set_ylim([1e-4, 1e0])
-
-    plt.tight_layout()
-    plt.show()
-
-import pandas as pd
-
 
 def plot_market_indicators(results, crisis_periods=None, major_crashes=None):
     """
@@ -271,7 +108,7 @@ def plot_market_indicators(results, crisis_periods=None, major_crashes=None):
     ax = axes[0]
     ax.plot(results['date'], results['mu'], color='orange', linewidth=0.8, label='μ')
     ax.set_ylabel('μ (mean corr)', fontsize=11)
-    ax.set_title('Figure 1: Evolution of Market Indicators', fontsize=14)
+    ax.set_title('Evolution of Market Indicators', fontsize=14)
     ax.legend(loc='upper right')
     ax.grid(True, alpha=0.3)
 
@@ -335,12 +172,11 @@ def plot_market_indicators(results, crisis_periods=None, major_crashes=None):
 
 
 
-def plot_scaling_relation(results_plot, fit=None, markers=markers):
+def plot_scaling_relation(results_plot, fit=None, markers=None):
     """
     Plot scaling relation:
       x = mu
       y = H - H_M
-
 
     Parameters
     ----------
@@ -352,14 +188,7 @@ def plot_scaling_relation(results_plot, fit=None, markers=markers):
         Mapping regime -> (marker, color, size)
     """
     if markers is None:
-        # fallback
-        markers = {
-            'Crash': ('^', 'red', 50),
-            'Type-1': ('D', 'deepskyblue', 40),
-            'Type-2': ('s', 'blue', 40),
-            'Anomaly': ('o', 'green', 40),
-            'Normal': ('o', 'gray', 15),
-        }
+        markers = PHASE_MARKERS
 
     fig, ax = plt.subplots(figsize=(10, 7))
 
@@ -388,7 +217,7 @@ def plot_scaling_relation(results_plot, fit=None, markers=markers):
 
     ax.set_xlabel('μ', fontsize=14)
     ax.set_ylabel('H - H$_M$', fontsize=14)
-    ax.set_title('Figure 2: Scaling Relation', fontsize=14)
+    ax.set_title('Scaling Relation (with log-scale insert)', fontsize=14)
     ax.legend(loc='upper right', fontsize=9)
     ax.grid(True, alpha=0.3)
     ax.set_xlim([0, 1])
@@ -448,7 +277,7 @@ def plot_entropy_differences(results, crash_dates, high_mu_q=0.85, very_high_mu_
         where=very_high_corr_mask, alpha=0.25, color='pink', label='Very high μ (>95th %ile)'
     )
     ax.set_ylabel('|H - H$_M$|', fontsize=12, color='magenta')
-    ax.set_title('Figure 3: Evolution of Entropy Differences in S&P-500 Market', fontsize=14)
+    ax.set_title('Evolution of Entropy Differences', fontsize=14)
     ax.set_ylim(bottom=0)
     ax.tick_params(axis='y', labelcolor='magenta')
     ax.legend(loc='upper right', fontsize=9)
@@ -533,7 +362,7 @@ def plot_full_temporal_evolution(results, plot_data = TEMP_PLOT_DATA , regime_li
         ax.set_ylabel(label, fontsize=11)
         ax.grid(True, alpha=0.3)
 
-    # Panel 8: -ln(H - H_M)
+    #-ln(H - H_M)
     ax = axes[7]
     neg_ln_H = -np.log(results['H_minus_HM'].clip(lower=1e-10))
     ax.plot(results['date'], neg_ln_H, color='cyan', linewidth=0.8)
@@ -545,76 +374,7 @@ def plot_full_temporal_evolution(results, plot_data = TEMP_PLOT_DATA , regime_li
     for ax in axes:
         ax.axvline(pd.Timestamp(regime_line_date), color='gray', linestyle='--', alpha=0.5, linewidth=1)
 
-    plt.suptitle('Figure S8: Temporal Evolution of Market Indicators', fontsize=14, y=1.01)
-    plt.tight_layout()
-    plt.show()
-
-def plot_phase_space_exact(results_plot,
-                           markers = markers,
-                           woe_point=(0.5, 0.005),
-                           transitions=None,
-                           get_transition_sequence_fn=None,
-                           title='Figure 3: Phase Space',
-                           legend_loc='lower left',
-                           xlim=(1e-4, 1e0),
-                           ylim=(1e-4, 1e0)):
-    """
-    Plot phase space:
-      - points colored/marked by 'phase_regime'
-      - WOE reference star
-      - transition sequences for specified event dates
-    """
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Scatter points by regime
-    for regime, (marker, color, size) in markers.items():
-        mask = results_plot['phase_regime'] == regime
-        if mask.any():
-            ax.scatter(
-                results_plot.loc[mask, 'abs_H_minus_HM'] + 1e-6,
-                results_plot.loc[mask, 'abs_H_minus_HGR'] + 1e-6,
-                marker=marker, c=color, s=size, label=regime,
-                alpha=0.7, edgecolors='white', linewidth=0.3, zorder=2
-            )
-
-    # WOE reference point
-    ax.scatter(
-        [woe_point[0]], [woe_point[1]],
-        c='white', marker='*', s=250,
-        edgecolors='black', linewidth=1.5, label='WOE', zorder=5
-    )
-
-    # Transition sequences
-    if transitions and get_transition_sequence_fn is not None:
-        for key, (event_date, line_style, line_color) in transitions.items():
-            seq = get_transition_sequence_fn(results_plot, event_date, 3, 3)
-            if len(seq) > 1:
-                x = seq['abs_H_minus_HM'].values + 1e-6
-                y = seq['abs_H_minus_HGR'].values + 1e-6
-                ax.plot(
-                    x, y, line_style, linewidth=2, zorder=4,
-                    marker='o', markersize=8,
-                    markerfacecolor=line_color, markeredgecolor=line_color
-                )
-                for i, (xi, yi) in enumerate(zip(x, y)):
-                    ax.annotate(
-                        str(i + 1), (xi, yi),
-                        fontsize=9, fontweight='bold',
-                        color=line_color,
-                        xytext=(4, 4), textcoords='offset points', zorder=6
-                    )
-
-    # Formatting
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlabel('|H - H$_M$|', fontsize=14)
-    ax.set_ylabel('|H - H$_{GR}$|', fontsize=14)
-    ax.set_title(title, fontsize=14)
-    ax.legend(loc=legend_loc, fontsize=10, framealpha=0.9)
-    ax.grid(True, alpha=0.3, which='both')
-    ax.set_xlim(list(xlim))
-    ax.set_ylim(list(ylim))
-
+    plt.suptitle('Temporal Evolution of Market Indicators', fontsize=14, y=1.01)
     plt.tight_layout()
     plt.show()
 
@@ -650,10 +410,6 @@ def plot_entropy_evolution(results, crash_dates, ylim=(4.2, 5.3)):
 
     plt.tight_layout()
     plt.show()
-
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.interpolate import griddata
 
 def plot_3d_phase_space_wireframe(results_plot, colors_3d, grid_n=30):
     """
@@ -721,7 +477,6 @@ def plot_3d_phase_space_wireframe(results_plot, colors_3d, grid_n=30):
     plt.tight_layout()
     plt.show()
 
-import matplotlib.pyplot as plt
 
 def plot_3d_entropy_differences(results_plot, markers_3d):
     """
@@ -754,11 +509,6 @@ def plot_3d_entropy_differences(results_plot, markers_3d):
     plt.tight_layout()
     plt.show()
 
-# plot_code.py
-
-
-
-
 DEFAULT_MARKERS: Dict[str, Tuple[str, str, float]] = {
     "Crash": ("^", "red", 50),
     "Type-1": ("D", "deepskyblue", 40),
@@ -779,8 +529,8 @@ def plot_event_transition_grid(
     ncols: int = 3,
     figsize: Tuple[int, int] = (15, 15),
     xlim: Tuple[float, float] = (1e-4, 1e0),
-    ylim: Tuple[float, float] = (1e-4, 1e0),
-) -> None:
+    ylim: Tuple[float, float] = (1e-4, 1e0),) -> None:
+
     """
     Plot a grid of phase-space transition paths around each event.
 
@@ -791,9 +541,9 @@ def plot_event_transition_grid(
     nrows = int(np.ceil(n / ncols))
 
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
-    axes = np.array(axes).reshape(-1)  # safe even if 1 row
+    axes = np.array(axes).reshape(-1)
 
-    # Precompute scatter masks (speed + consistent styling)
+    # Precompute scatter masks
     scatter_data = []
     for regime, (m, c, s) in markers.items():
         mask = results_labeled["phase_regime"] == regime
@@ -819,7 +569,7 @@ def plot_event_transition_grid(
                     zorder=1,
                 )
 
-        # Threshold guide lines (matching your cell)
+        # Threshold guide lines
         ax.axvline(thresholds.H_HM_25, color="red", linestyle=":", alpha=0.5, linewidth=1)
         ax.axvline(thresholds.H_HM_50, color="gray", linestyle=":", alpha=0.5, linewidth=1)
         ax.axhline(thresholds.H_HGR_50, color="red", linestyle=":", alpha=0.5, linewidth=1)
@@ -869,15 +619,8 @@ def plot_event_transition_grid(
     plt.suptitle("Phase Transitions for Major Market Events", fontsize=12, y=1.02)
     plt.show()
 
-# plot_code.py
 
-import matplotlib.pyplot as plt
-import pandas as pd
-
-from modules.eigen import assign_phase_regimes_quantiles  # reuse existing function
-
-
-def plot_best_red_blue_transitions(
+def plot_phase_transitions(
     results,
     *,
     crash_reference_date="1987-10-19",
@@ -885,8 +628,8 @@ def plot_best_red_blue_transitions(
     print_tables=True,
     xlim=(1e-4, 1e0),
     ylim=(1e-4, 1e0),
-    title="Phase Space with Order-Disorder Transitions",
-):
+    title="Phase Space with Order-Disorder Transitions",):
+
     """
     Single function version of the notebook cell:
       - labels phase_regime using assign_phase_regimes_quantiles (reused)
@@ -944,9 +687,7 @@ def plot_best_red_blue_transitions(
     red_event_date = results_plot.iloc[best_red_idx]["date"].strftime("%Y-%m-%d")
     blue_event_date = None if best_blue_idx is None else results_plot.iloc[best_blue_idx]["date"].strftime("%Y-%m-%d")
 
-    # -------------------------------------------------------------------------
-    # Optional printing (matches your cell)
-    # -------------------------------------------------------------------------
+    #Table
     if print_tables:
         red_start = red_seq.iloc[0]["date"].strftime("%Y-%m-%d")
         red_end = red_seq.iloc[-1]["date"].strftime("%Y-%m-%d")
@@ -1053,7 +794,6 @@ def plot_best_red_blue_transitions(
     plt.tight_layout()
     plt.show()
 
-    # Return useful things in case you want to reuse them later
     return {
         "results_plot": results_plot,
         "best_red_idx": int(best_red_idx),
@@ -1161,13 +901,6 @@ def report_crash_regime_detections(
         if d["detected"]
     }
 }
-    
-# plot_code.py
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import matplotlib.patches as mpatches
 
 
 def plot_entropy_crash_detection_panels(
@@ -1176,11 +909,10 @@ def plot_entropy_crash_detection_panels(
     well_detected_crashes,
     *,
     days_threshold=120,
-    title="Phase Transition Method: Entropy-Based Crash Detection",
-):
+    title="Phase Transition Method: Entropy-Based Crash Detection",):
+
     """
-    Replicates the 3-panel crash-detection visualization cell, but WITHOUT
-    recomputing phase_regime or well_detected crashes.
+    3-panel crash-detection
 
     Parameters
     ----------
@@ -1202,9 +934,8 @@ def plot_entropy_crash_detection_panels(
         Used to mark epochs "near" a well-detected crash (default 120)
     """
 
-    # ------------------------------------------------------------------
-    # is_near_event (same logic as your cell)
-    # ------------------------------------------------------------------
+
+    # is_near_event 
     def is_near_event(epoch_date, events_dict, days_threshold=120):
         for event_date in events_dict.keys():
             event_ts = pd.Timestamp(event_date)
@@ -1212,7 +943,7 @@ def plot_entropy_crash_detection_panels(
                 return True
         return False
 
-    # Add near_known_crash column (same as your cell)
+    #near_known_crash column
     results_plot = results_plot.copy()
     results_plot["near_known_crash"] = results_plot["date"].apply(
         lambda d: is_near_event(d, well_detected_crashes, days_threshold=days_threshold)
